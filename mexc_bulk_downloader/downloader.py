@@ -95,7 +95,7 @@ class MexcBulkDownloader:
         """
         return f"{self._destination_dir}/{symbol}/{interval}"
 
-    def execute_download(self, start_date: datetime, end_date: datetime, interval: str):
+    def execute_download(self, symbol:str, start_date: datetime, end_date: datetime, interval: str):
         """
         Execute download.
         Attention
@@ -107,6 +107,7 @@ class MexcBulkDownloader:
         If only the end time is provided, the 2000 pieces of data closest to the end time are returned.
         If neither start time nor end time is provided, the 2000 pieces of data closest to the current time
         in the system are queried.
+        :param symbol: cryptocurrency symbol.
         :param start_date: Start date of the data.
         :param end_date: End date of the data.
         :param interval: Interval of the data.
@@ -117,12 +118,13 @@ class MexcBulkDownloader:
             "interval": self._make_interval(interval)
         }
         response = requests.get(self._make_url(), params=params)
+        print(f"[green]Success: {self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv[/green]")
         if response.status_code == 200:
             data = response.json()
             df = pd.DataFrame(data)
             df['data'] = df['data'].apply(lambda x: x.strip('[]').split(', ') if isinstance(x, str) else x)
             expanded_data = df['data'].apply(pd.Series).T
-            expanded_data.to_csv(f"{self._make_destination_dir()}/{int(start_date.timestamp())}.csv", index=False)
+            expanded_data.to_csv(f"{self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv", index=False)
         else:
             print(f"[red]Error: {response.status_code}[/red]")
 
@@ -148,16 +150,27 @@ class MexcBulkDownloader:
             while True:
                 # 2秒で20回までの制限があるので、それを考慮する
                 if init_start_date + timedelta(minutes=2000) < init_end_date:
-                    self.execute_download(init_start_date, init_start_date + timedelta(minutes=2000), interval)
+                    # 存在確認
+                    if os.path.exists(f"{self._make_destination_dir(symbol, interval)}/{int(init_start_date.timestamp())}.csv"):
+                        print(
+                            f"[yellow]Skip: {self._make_destination_dir(symbol, interval)}/{int(init_start_date.timestamp())}.csv[/yellow]")
+                        init_start_date = init_start_date + timedelta(minutes=2000)
+                        continue
+                    self.execute_download(symbol, init_start_date, init_start_date + timedelta(minutes=2000), interval)
                     init_start_date = init_start_date + timedelta(minutes=2000)
+                    time.sleep(0.1)
                 else:
-                    self.execute_download(init_start_date, init_end_date, interval)
+                    self.execute_download(symbol, init_start_date, init_end_date, interval)
                     break
-                time.sleep(0.1)
+
+        # all.csvを一旦削除
+        if os.path.exists(f"{self._make_destination_dir(symbol, interval)}/all.csv"):
+            os.remove(f"{self._make_destination_dir(symbol, interval)}/all.csv")
 
         # データを結合する
         df = pd.DataFrame()
         for file in os.listdir(self._make_destination_dir(symbol, interval)):
+            print(f"[green]Concat: {file}[/green]")
             df = pd.concat([df, pd.read_csv(f"{self._make_destination_dir(symbol, interval)}/{file}")])
         # ヘッダーを設定
         df.to_csv(f"{self._make_destination_dir(symbol, interval)}/all.csv", index=False)
@@ -167,5 +180,6 @@ class MexcBulkDownloader:
         Download all data.
         :param interval: Interval of the data.
         """
-        for symbol in track(self.get_all_symbols_futures(), description="Downloading..."):
+        for symbol in track(self.get_all_symbols_futures(), description="Downloading...", total=len(self.get_all_symbols_futures())):
+            print(f"[green]Downloading: {symbol}[/green]")
             self.download(symbol, None, None, interval)
