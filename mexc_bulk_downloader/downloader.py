@@ -1,0 +1,171 @@
+"""
+mexc_bulk_downloader
+"""
+
+# import standard libraries
+import os
+import time
+from datetime import datetime, timedelta
+import warnings
+
+import pandas as pd
+# import third-party libraries
+import requests
+from rich import print
+from rich.progress import track
+
+from .exceptions import InvalidSymbolFormatError, InvalidIntervalError
+
+warnings.filterwarnings("ignore")
+
+
+class MexcBulkDownloader:
+    _MEXC_BASE_URL = "https://contract.mexc.com"
+    _INTERVALS = {
+        "1m": "Min1",
+        "5m": "Min5",
+        "15m": "Min15",
+        "30m": "Min30",
+        "1h": "Min60",
+        "4h": "Hour4",
+        "8h": "Hour8",
+        "1d": "Day1",
+        "1w": "Week1",
+        "1M": "Month1",
+    }
+
+    def __init__(
+            self, destination_dir=".",
+    ):
+        """
+        :param destination_dir: Directory to save the downloaded data.
+        """
+        self._destination_dir = destination_dir + "/mexc_data"
+
+    def _make_interval(self, interval: str = "1m") -> str:
+        """
+        Make interval for the request.
+        Usage of the interval parameter:
+        1m, 5m, 15m, 30m, 1h, 4h, 8h, 1d, 1w, 1M
+
+        :param interval: Interval of the data.
+        :return: interval
+        """
+        if interval not in self._INTERVALS.keys():
+            raise InvalidIntervalError(f"Invalid interval: {interval} is not in {self._INTERVALS.keys()}")
+        return self._INTERVALS[interval]
+
+    def validate_symbol(self, symbol: str = "BTC_USDT") -> str:
+        """
+        Validate symbol format.
+        :param symbol: cryptocurrency symbol.
+        :return: symbol
+        """
+        if symbol in self.get_all_symbols_futures():
+            return symbol
+        else:
+            raise InvalidSymbolFormatError(f"Invalid symbol: {symbol}")
+
+    @staticmethod
+    def get_all_symbols_futures() -> list:
+        """
+        Get all symbols (futures).
+        :return: symbols
+        """
+        response = requests.get(f"{MexcBulkDownloader._MEXC_BASE_URL}/api/v1/contract/risk_reverse")
+        if response.status_code == 200:
+            data = response.json()
+            return [i["symbol"] for i in data['data']]
+        else:
+            print(f"[red]Error: {response.status_code}[/red]")
+
+    def _make_url(self):
+        """
+        Make url for the request.
+        :return: url
+        """
+        return f"{self._MEXC_BASE_URL}/api/v1/contract/kline/{self.validate_symbol()}"
+
+    def _make_destination_dir(self, symbol: str = "BTC_USDT", interval: str = "1m"):
+        """
+        Make destination directory.
+        :param symbol: cryptocurrency symbol.
+        :param interval: Interval of the data.
+        :return: destination_dir
+        """
+        return f"{self._destination_dir}/{symbol}/{interval}"
+
+    def execute_download(self, start_date: datetime, end_date: datetime, interval: str):
+        """
+        Execute download.
+        Attention
+        1. The maximum data in a single request is 2000 pieces. If your choice
+        of start/end time and granularity of time results in more than the maximum volume of data in a single
+        request, your request will only return 2000 pieces. If you want to get sufficiently fine-grained data over a
+        larger time range, you need to make several times requests.
+        2. If only the start time is provided, then query the data from the start time to the current system time.
+        If only the end time is provided, the 2000 pieces of data closest to the end time are returned.
+        If neither start time nor end time is provided, the 2000 pieces of data closest to the current time
+        in the system are queried.
+        :param start_date: Start date of the data.
+        :param end_date: End date of the data.
+        :param interval: Interval of the data.
+        """
+        params = {
+            "start": int(start_date.timestamp()),
+            "end": int(end_date.timestamp()),
+            "interval": self._make_interval(interval)
+        }
+        response = requests.get(self._make_url(), params=params)
+        if response.status_code == 200:
+            data = response.json()
+            df = pd.DataFrame(data)
+            df['data'] = df['data'].apply(lambda x: x.strip('[]').split(', ') if isinstance(x, str) else x)
+            expanded_data = df['data'].apply(pd.Series).T
+            expanded_data.to_csv(f"{self._make_destination_dir()}/{int(start_date.timestamp())}.csv", index=False)
+        else:
+            print(f"[red]Error: {response.status_code}[/red]")
+
+    def download(self, symbol: str = "BTC_USDT", start_date: datetime = None, end_date: datetime = None,
+                 interval: str = "1m"):
+        """
+        Download data.
+        :param symbol: cryptocurrency symbol.
+        :param start_date: Start date of the data.
+        :param end_date: End date of the data.
+        :param interval: Interval of the data.
+        """
+        self.validate_symbol(symbol)
+
+        if not os.path.exists(self._make_destination_dir(symbol, interval)):
+            os.makedirs(self._make_destination_dir(symbol, interval))
+
+        # 全てのデータを取得する場合
+        if start_date is None and end_date is None:
+            init_start_date = datetime(2020, 1, 1)
+            init_end_date = datetime.now()
+            # 2000分ずつデータを取得する
+            while True:
+                # 2秒で20回までの制限があるので、それを考慮する
+                if init_start_date + timedelta(minutes=2000) < init_end_date:
+                    self.execute_download(init_start_date, init_start_date + timedelta(minutes=2000), interval)
+                    init_start_date = init_start_date + timedelta(minutes=2000)
+                else:
+                    self.execute_download(init_start_date, init_end_date, interval)
+                    break
+                time.sleep(0.1)
+
+        # データを結合する
+        df = pd.DataFrame()
+        for file in os.listdir(self._make_destination_dir(symbol, interval)):
+            df = pd.concat([df, pd.read_csv(f"{self._make_destination_dir(symbol, interval)}/{file}")])
+        # ヘッダーを設定
+        df.to_csv(f"{self._make_destination_dir(symbol, interval)}/all.csv", index=False)
+
+    def download_all(self, interval: str = "1m"):
+        """
+        Download all data.
+        :param interval: Interval of the data.
+        """
+        for symbol in track(self.get_all_symbols_futures(), description="Downloading..."):
+            self.download(symbol, None, None, interval)
