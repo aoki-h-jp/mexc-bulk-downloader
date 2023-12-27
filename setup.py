@@ -8,7 +8,6 @@ setup(
         "requests",
         "rich",
         "pytest",
-        "beautifulsoup4",
         "pandas",
     ],
     author="aoki-h-jp",
