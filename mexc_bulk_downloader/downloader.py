@@ -5,8 +5,8 @@ mexc_bulk_downloader
 # import standard libraries
 import os
 import time
-from datetime import datetime, timedelta
 import warnings
+from datetime import datetime, timedelta
 
 import pandas as pd
 # import third-party libraries
@@ -14,7 +14,7 @@ import requests
 from rich import print
 from rich.progress import track
 
-from .exceptions import InvalidSymbolFormatError, InvalidIntervalError
+from .exceptions import InvalidIntervalError, InvalidSymbolFormatError
 
 warnings.filterwarnings("ignore")
 
@@ -35,7 +35,8 @@ class MexcBulkDownloader:
     }
 
     def __init__(
-            self, destination_dir=".",
+        self,
+        destination_dir=".",
     ):
         """
         :param destination_dir: Directory to save the downloaded data.
@@ -52,7 +53,9 @@ class MexcBulkDownloader:
         :return: interval
         """
         if interval not in self._INTERVALS.keys():
-            raise InvalidIntervalError(f"Invalid interval: {interval} is not in {self._INTERVALS.keys()}")
+            raise InvalidIntervalError(
+                f"Invalid interval: {interval} is not in {self._INTERVALS.keys()}"
+            )
         return self._INTERVALS[interval]
 
     def validate_symbol(self, symbol: str = "BTC_USDT") -> str:
@@ -72,10 +75,12 @@ class MexcBulkDownloader:
         Get all symbols (futures).
         :return: symbols
         """
-        response = requests.get(f"{MexcBulkDownloader._MEXC_BASE_URL}/api/v1/contract/risk_reverse")
+        response = requests.get(
+            f"{MexcBulkDownloader._MEXC_BASE_URL}/api/v1/contract/risk_reverse"
+        )
         if response.status_code == 200:
             data = response.json()
-            return [i["symbol"] for i in data['data']]
+            return [i["symbol"] for i in data["data"]]
         else:
             print(f"[red]Error: {response.status_code}[/red]")
 
@@ -95,7 +100,9 @@ class MexcBulkDownloader:
         """
         return f"{self._destination_dir}/{symbol}/{interval}"
 
-    def execute_download(self, symbol:str, start_date: datetime, end_date: datetime, interval: str):
+    def execute_download(
+        self, symbol: str, start_date: datetime, end_date: datetime, interval: str
+    ):
         """
         Execute download.
         Attention
@@ -118,18 +125,25 @@ class MexcBulkDownloader:
         params = {
             "start": int(start_date.timestamp()),
             "end": int(end_date.timestamp()),
-            "interval": self._make_interval(interval)
+            "interval": self._make_interval(interval),
         }
         for attempt in range(max_retries):
             try:
                 response = requests.get(self._make_url(), params=params)
-                print(f"[green]Success: {self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv[/green]")
+                print(
+                    f"[green]Success: {self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv[/green]"
+                )
                 if response.status_code == 200:
                     data = response.json()
                     df = pd.DataFrame(data)
-                    df['data'] = df['data'].apply(lambda x: x.strip('[]').split(', ') if isinstance(x, str) else x)
-                    expanded_data = df['data'].apply(pd.Series).T
-                    expanded_data.to_csv(f"{self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv", index=False)
+                    df["data"] = df["data"].apply(
+                        lambda x: x.strip("[]").split(", ") if isinstance(x, str) else x
+                    )
+                    expanded_data = df["data"].apply(pd.Series).T
+                    expanded_data.to_csv(
+                        f"{self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv",
+                        index=False,
+                    )
                 else:
                     print(f"[red]Error: {response.status_code}[/red]")
                 break
@@ -139,8 +153,13 @@ class MexcBulkDownloader:
         else:
             print(f"[red]Error: Failed to download[/red]")
 
-    def download(self, symbol: str = "BTC_USDT", start_date: datetime = None, end_date: datetime = None,
-                 interval: str = "1m"):
+    def download(
+        self,
+        symbol: str = "BTC_USDT",
+        start_date: datetime = None,
+        end_date: datetime = None,
+        interval: str = "1m",
+    ):
         """
         Download data.
         :param symbol: cryptocurrency symbol.
@@ -162,23 +181,39 @@ class MexcBulkDownloader:
                 # 2秒で20回までの制限があるので、それを考慮する
                 if init_start_date + timedelta(minutes=2000) < init_end_date:
                     # 存在確認
-                    if os.path.exists(f"{self._make_destination_dir(symbol, interval)}/{int(init_start_date.timestamp())}.csv"):
+                    if os.path.exists(
+                        f"{self._make_destination_dir(symbol, interval)}/{int(init_start_date.timestamp())}.csv"
+                    ):
                         print(
-                            f"[yellow]Skip: {self._make_destination_dir(symbol, interval)}/{int(init_start_date.timestamp())}.csv[/yellow]")
+                            f"[yellow]Skip: {self._make_destination_dir(symbol, interval)}/{int(init_start_date.timestamp())}.csv[/yellow]"
+                        )
                         init_start_date = init_start_date + timedelta(minutes=2000)
                         continue
-                    self.execute_download(symbol, init_start_date, init_start_date + timedelta(minutes=2000), interval)
+                    self.execute_download(
+                        symbol,
+                        init_start_date,
+                        init_start_date + timedelta(minutes=2000),
+                        interval,
+                    )
                     init_start_date = init_start_date + timedelta(minutes=2000)
                     time.sleep(0.1)
                 else:
-                    self.execute_download(symbol, init_start_date, init_end_date, interval)
+                    self.execute_download(
+                        symbol, init_start_date, init_end_date, interval
+                    )
                     break
 
         # all.csvが1日以内に作成されている場合はpassする
         # そうでない場合は削除して作り直す
         if os.path.exists(f"{self._make_destination_dir(symbol, interval)}/all.csv"):
-            if datetime.fromtimestamp(os.path.getmtime(f"{self._make_destination_dir(symbol, interval)}/all.csv")) > datetime.now() - timedelta(days=1):
-                print(f"[yellow]Skip: {self._make_destination_dir(symbol, interval)}/all.csv[/yellow]")
+            if datetime.fromtimestamp(
+                os.path.getmtime(
+                    f"{self._make_destination_dir(symbol, interval)}/all.csv"
+                )
+            ) > datetime.now() - timedelta(days=1):
+                print(
+                    f"[yellow]Skip: {self._make_destination_dir(symbol, interval)}/all.csv[/yellow]"
+                )
                 return
             else:
                 os.remove(f"{self._make_destination_dir(symbol, interval)}/all.csv")
@@ -187,15 +222,28 @@ class MexcBulkDownloader:
         df = pd.DataFrame()
         for file in os.listdir(self._make_destination_dir(symbol, interval)):
             print(f"[green]Concat: {file}[/green]")
-            df = pd.concat([df, pd.read_csv(f"{self._make_destination_dir(symbol, interval)}/{file}")])
+            df = pd.concat(
+                [
+                    df,
+                    pd.read_csv(
+                        f"{self._make_destination_dir(symbol, interval)}/{file}"
+                    ),
+                ]
+            )
         # ヘッダーを設定
-        df.to_csv(f"{self._make_destination_dir(symbol, interval)}/all.csv", index=False)
+        df.to_csv(
+            f"{self._make_destination_dir(symbol, interval)}/all.csv", index=False
+        )
 
     def download_all(self, interval: str = "1m"):
         """
         Download all data.
         :param interval: Interval of the data.
         """
-        for symbol in track(self.get_all_symbols_futures(), description="Downloading...", total=len(self.get_all_symbols_futures())):
+        for symbol in track(
+            self.get_all_symbols_futures(),
+            description="Downloading...",
+            total=len(self.get_all_symbols_futures()),
+        ):
             print(f"[green]Downloading: {symbol}[/green]")
             self.download(symbol, None, None, interval)
