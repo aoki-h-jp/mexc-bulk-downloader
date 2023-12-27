@@ -112,21 +112,32 @@ class MexcBulkDownloader:
         :param end_date: End date of the data.
         :param interval: Interval of the data.
         """
+        max_retries = 5  # Maximum number of retries
+        retry_delay = 30  # Seconds to wait before retrying (30 seconds)
+
         params = {
             "start": int(start_date.timestamp()),
             "end": int(end_date.timestamp()),
             "interval": self._make_interval(interval)
         }
-        response = requests.get(self._make_url(), params=params)
-        print(f"[green]Success: {self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv[/green]")
-        if response.status_code == 200:
-            data = response.json()
-            df = pd.DataFrame(data)
-            df['data'] = df['data'].apply(lambda x: x.strip('[]').split(', ') if isinstance(x, str) else x)
-            expanded_data = df['data'].apply(pd.Series).T
-            expanded_data.to_csv(f"{self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv", index=False)
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(self._make_url(), params=params)
+                print(f"[green]Success: {self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv[/green]")
+                if response.status_code == 200:
+                    data = response.json()
+                    df = pd.DataFrame(data)
+                    df['data'] = df['data'].apply(lambda x: x.strip('[]').split(', ') if isinstance(x, str) else x)
+                    expanded_data = df['data'].apply(pd.Series).T
+                    expanded_data.to_csv(f"{self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv", index=False)
+                else:
+                    print(f"[red]Error: {response.status_code}[/red]")
+                break
+            except ConnectionError as e:
+                print(f"[red]Error: {e}[/red]")
+                time.sleep(retry_delay)
         else:
-            print(f"[red]Error: {response.status_code}[/red]")
+            print(f"[red]Error: Failed to download[/red]")
 
     def download(self, symbol: str = "BTC_USDT", start_date: datetime = None, end_date: datetime = None,
                  interval: str = "1m"):
@@ -163,9 +174,14 @@ class MexcBulkDownloader:
                     self.execute_download(symbol, init_start_date, init_end_date, interval)
                     break
 
-        # all.csvを一旦削除
+        # all.csvが1日以内に作成されている場合はpassする
+        # そうでない場合は削除して作り直す
         if os.path.exists(f"{self._make_destination_dir(symbol, interval)}/all.csv"):
-            os.remove(f"{self._make_destination_dir(symbol, interval)}/all.csv")
+            if datetime.fromtimestamp(os.path.getmtime(f"{self._make_destination_dir(symbol, interval)}/all.csv")) > datetime.now() - timedelta(days=1):
+                print(f"[yellow]Skip: {self._make_destination_dir(symbol, interval)}/all.csv[/yellow]")
+                return
+            else:
+                os.remove(f"{self._make_destination_dir(symbol, interval)}/all.csv")
 
         # データを結合する
         df = pd.DataFrame()
