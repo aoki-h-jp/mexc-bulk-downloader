@@ -1,5 +1,6 @@
 """
 mexc_bulk_downloader
+TODO: spotやその他デリバティブ指標にも対応する
 """
 
 # import standard libraries
@@ -14,7 +15,8 @@ import requests
 from rich import print
 from rich.progress import track
 
-from .exceptions import InvalidIntervalError, InvalidSymbolFormatError
+from mexc_bulk_downloader.exceptions import (InvalidIntervalError,
+                                             InvalidSymbolFormatError)
 
 warnings.filterwarnings("ignore")
 
@@ -32,6 +34,19 @@ class MexcBulkDownloader:
         "1d": "Day1",
         "1w": "Week1",
         "1M": "Month1",
+    }
+
+    _INTERVALS_MINUTES = {
+        "1m": 1,
+        "5m": 5,
+        "15m": 15,
+        "30m": 30,
+        "1h": 60,
+        "4h": 240,
+        "8h": 480,
+        "1d": 1440,
+        "1w": 10080,
+        "1M": 43200,
     }
 
     def __init__(
@@ -69,15 +84,12 @@ class MexcBulkDownloader:
         else:
             raise InvalidSymbolFormatError(f"Invalid symbol: {symbol}")
 
-    @staticmethod
-    def get_all_symbols_futures() -> list:
+    def get_all_symbols_futures(self) -> list:
         """
         Get all symbols (futures).
         :return: symbols
         """
-        response = requests.get(
-            f"{MexcBulkDownloader._MEXC_BASE_URL}/api/v1/contract/risk_reverse"
-        )
+        response = requests.get(f"{self._MEXC_BASE_URL}/api/v1/contract/risk_reverse")
         if response.status_code == 200:
             data = response.json()
             return [i["symbol"] for i in data["data"]]
@@ -147,9 +159,10 @@ class MexcBulkDownloader:
                 else:
                     print(f"[red]Error: {response.status_code}[/red]")
                 break
-            except ConnectionError as e:
+            except (requests.ConnectionError, requests.HTTPError) as e:
                 print(f"[red]Error: {e}[/red]")
                 time.sleep(retry_delay)
+                attempt += 1
         else:
             print(f"[red]Error: Failed to download[/red]")
 
@@ -178,8 +191,9 @@ class MexcBulkDownloader:
             init_end_date = datetime.now()
             # 2000分ずつデータを取得する
             while True:
+                step_time = 2000 * self._INTERVALS_MINUTES[interval]
                 # 2秒で20回までの制限があるので、それを考慮する
-                if init_start_date + timedelta(minutes=2000) < init_end_date:
+                if init_start_date + timedelta(minutes=step_time) < init_end_date:
                     # 存在確認
                     if os.path.exists(
                         f"{self._make_destination_dir(symbol, interval)}/{int(init_start_date.timestamp())}.csv"
@@ -187,15 +201,15 @@ class MexcBulkDownloader:
                         print(
                             f"[yellow]Skip: {self._make_destination_dir(symbol, interval)}/{int(init_start_date.timestamp())}.csv[/yellow]"
                         )
-                        init_start_date = init_start_date + timedelta(minutes=2000)
+                        init_start_date = init_start_date + timedelta(minutes=step_time)
                         continue
                     self.execute_download(
                         symbol,
                         init_start_date,
-                        init_start_date + timedelta(minutes=2000),
+                        init_start_date + timedelta(minutes=step_time),
                         interval,
                     )
-                    init_start_date = init_start_date + timedelta(minutes=2000)
+                    init_start_date = init_start_date + timedelta(minutes=step_time)
                     time.sleep(0.1)
                 else:
                     self.execute_download(
@@ -230,6 +244,9 @@ class MexcBulkDownloader:
                     ),
                 ]
             )
+        # 時間でソートする
+        df.sort_values(by="time", inplace=True)
+
         # ヘッダーを設定
         df.to_csv(
             f"{self._make_destination_dir(symbol, interval)}/all.csv", index=False

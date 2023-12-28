@@ -7,7 +7,7 @@ setup(
     install_requires=[
         "requests",
         "rich",
-        "pytest",
+        "tests",
         "pandas",
     ],
     author="aoki-h-jp",
