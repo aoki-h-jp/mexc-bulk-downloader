@@ -14,7 +14,8 @@ import requests
 from rich import print
 from rich.progress import track
 
-from mexc_bulk_downloader.exceptions import InvalidIntervalError, InvalidSymbolFormatError
+from mexc_bulk_downloader.exceptions import (InvalidIntervalError,
+                                             InvalidSymbolFormatError)
 
 warnings.filterwarnings("ignore")
 
@@ -87,9 +88,7 @@ class MexcBulkDownloader:
         Get all symbols (futures).
         :return: symbols
         """
-        response = requests.get(
-            f"{self._MEXC_BASE_URL}/api/v1/contract/risk_reverse"
-        )
+        response = requests.get(f"{self._MEXC_BASE_URL}/api/v1/contract/risk_reverse")
         if response.status_code == 200:
             data = response.json()
             return [i["symbol"] for i in data["data"]]
@@ -191,7 +190,7 @@ class MexcBulkDownloader:
             init_end_date = datetime.now()
             # 2000分ずつデータを取得する
             while True:
-                step_time = 2000*self._INTERVALS_MINUTES[interval]
+                step_time = 2000 * self._INTERVALS_MINUTES[interval]
                 # 2秒で20回までの制限があるので、それを考慮する
                 if init_start_date + timedelta(minutes=step_time) < init_end_date:
                     # 存在確認
