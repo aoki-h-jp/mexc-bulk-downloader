@@ -163,7 +163,9 @@ def test_execute_download():
         "time.sleep"
     ) as mock_sleep:
         # requests.getのモックを設定
-        mock_get.return_value = MagicMock(status_code=200, json=lambda: risk_reverse_response)
+        mock_get.return_value = MagicMock(
+            status_code=200, json=lambda: risk_reverse_response
+        )
 
         # メソッド呼び出し
         downloader.execute_download(symbol, start_date, end_date, interval)
@@ -193,8 +195,9 @@ def test_execute_download_non_200_response(capsys):
         else:
             return MagicMock(status_code=404)
 
-    with patch("requests.get", side_effect=mock_response) as mock_get, patch.object(downloader, "_make_url", return_value=expected_url):
-
+    with patch("requests.get", side_effect=mock_response) as mock_get, patch.object(
+        downloader, "_make_url", return_value=expected_url
+    ):
         downloader.execute_download(symbol, start_date, end_date, interval)
 
         # 標準出力をキャプチャして確認
