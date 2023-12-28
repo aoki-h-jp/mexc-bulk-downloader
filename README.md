@@ -4,7 +4,7 @@
 [![Run pytest on all branches](https://github.com/aoki-h-jp/mexc-bulk-downloader/actions/workflows/pytest.yml/badge.svg?branch=main)](https://github.com/aoki-h-jp/mexc-bulk-downloader/actions/workflows/pytest.yml)
 
 
-## Python library for bulk downloading bybit historical data
+## Python library for bulk downloading MEXC historical data
 A Python library to efficiently and concurrently download historical data files from MEXC. Supports USDT Perpetual.
 
 ## Installation
