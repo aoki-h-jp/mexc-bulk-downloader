@@ -2,12 +2,12 @@ from setuptools import setup
 
 setup(
     name="mexc-bulk-downloader",
-    version="1.0.0",
+    version="1.0.1",
     description="Python library to efficiently and concurrently download historical data files from MEXC. Supports all asset types (spot, USDT-M) and all data frequencies.",
     install_requires=[
         "requests",
         "rich",
-        "tests",
+        "pytest",
         "pandas",
     ],
     author="aoki-h-jp",
