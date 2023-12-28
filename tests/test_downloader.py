@@ -2,13 +2,12 @@
 pytest
 TODO: download()の単体テスト
 """
-
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-import requests
 import requests_mock
+from requests.exceptions import ConnectionError
 
 from mexc_bulk_downloader.downloader import MexcBulkDownloader
 from mexc_bulk_downloader.exceptions import (InvalidIntervalError,
@@ -91,7 +90,7 @@ def test_make_url_with_valid_symbol():
     # 正しいシンボルの場合、期待するURLを返すかテスト
     with patch.object(downloader, "validate_symbol", return_value="BTC_USDT"):
         expected_url = "https://contract.mexc.com/api/v1/contract/kline/BTC_USDT"
-        assert downloader._make_url() == expected_url
+        assert downloader._make_url("BTC_USDT") == expected_url
 
 
 def test_make_url_with_invalid_symbol():
@@ -104,7 +103,7 @@ def test_make_url_with_invalid_symbol():
         "validate_symbol",
         side_effect=InvalidSymbolFormatError("Invalid symbol: INVALID_SYMBOL"),
     ), pytest.raises(InvalidSymbolFormatError):
-        downloader._make_url()
+        downloader._make_url("INVALID_SYMBOL")
 
 
 def test_download_all():
@@ -164,7 +163,9 @@ def test_execute_download():
         "time.sleep"
     ) as mock_sleep:
         # requests.getのモックを設定
-        mock_get.return_value = MagicMock(status_code=200, json=lambda: response_data)
+        mock_get.return_value = MagicMock(
+            status_code=200, json=lambda: risk_reverse_response
+        )
 
         # メソッド呼び出し
         downloader.execute_download(symbol, start_date, end_date, interval)
@@ -188,12 +189,15 @@ def test_execute_download_non_200_response(capsys):
     interval = "1m"
     expected_url = f"https://contract.mexc.com/api/v1/contract/kline/{symbol}"
 
-    with patch("requests.get") as mock_get, patch.object(
-        downloader, "_make_url", return_value=expected_url
-    ), patch("builtins.print") as mock_print:
-        # 非200のステータスコードを返すように設定
-        mock_get.return_value = MagicMock(status_code=404)
+    def mock_response(*args, **kwargs):
+        if mock_get.call_count == 1:
+            return MagicMock(status_code=200, json=lambda: risk_reverse_response)
+        else:
+            return MagicMock(status_code=404)
 
+    with patch("requests.get", side_effect=mock_response) as mock_get, patch.object(
+        downloader, "_make_url", return_value=expected_url
+    ):
         downloader.execute_download(symbol, start_date, end_date, interval)
 
         # 標準出力をキャプチャして確認
@@ -209,7 +213,13 @@ def test_execute_download_connection_error(capsys):
     interval = "1m"
     expected_url = f"https://contract.mexc.com/api/v1/contract/kline/{symbol}"
 
-    with patch("requests.get", side_effect=requests.ConnectionError), patch.object(
+    def mock_response(*args, **kwargs):
+        if mock_get.call_count == 1:
+            return MagicMock(status_code=200, json=lambda: risk_reverse_response)
+        else:
+            raise ConnectionError
+
+    with patch("requests.get", side_effect=mock_response) as mock_get, patch.object(
         downloader, "_make_url", return_value=expected_url
     ), patch("builtins.print") as mock_print, patch("time.sleep") as mock_sleep:
         downloader.execute_download(symbol, start_date, end_date, interval)
