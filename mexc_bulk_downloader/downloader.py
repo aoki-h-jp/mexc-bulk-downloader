@@ -147,9 +147,10 @@ class MexcBulkDownloader:
                 else:
                     print(f"[red]Error: {response.status_code}[/red]")
                 break
-            except ConnectionError as e:
+            except (requests.ConnectionError, requests.HTTPError) as e:
                 print(f"[red]Error: {e}[/red]")
                 time.sleep(retry_delay)
+                attempt += 1
         else:
             print(f"[red]Error: Failed to download[/red]")
 
