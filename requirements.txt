@@ -3,3 +3,4 @@ setuptools~=68.1.2
 rich~=10.16.2
 pytest~=4.6.11
 pandas~=2.0.3
+requests-mock~=1.11.0

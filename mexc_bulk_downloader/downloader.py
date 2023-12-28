@@ -1,7 +1,6 @@
 """
 mexc_bulk_downloader
 TODO: spotやその他デリバティブ指標にも対応する
-TODO: pytestを導入する
 """
 
 # import standard libraries
