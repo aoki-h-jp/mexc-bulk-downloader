@@ -15,3 +15,6 @@ downloader.download(
 downloader.download(
     symbol="BTC_USDT", start_date=start_time, end_date=end_time, interval="1h"
 )
+
+# Download all available symbols
+downloader.download_all(interval="1h")
