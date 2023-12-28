@@ -14,6 +14,7 @@ pip install git+https://github.com/aoki-h-jp/mexc-bulk-downloader
 ```
 
 ## Usage
+Please see [download.py](example/download.py) for more details.
 ### Download all kline data (USDT Perpetual)
 
 ```python
@@ -24,7 +25,9 @@ mexc.download_all("1m")
 ```
 
 ## pytest
-Work in progress.
+```bash
+> pytest
+```
 
 ## If you want to report a bug or request a feature
 Please create an issue on this repository!
