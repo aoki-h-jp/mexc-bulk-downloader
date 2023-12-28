@@ -96,12 +96,13 @@ class MexcBulkDownloader:
         else:
             print(f"[red]Error: {response.status_code}[/red]")
 
-    def _make_url(self):
+    def _make_url(self, symbol: str) -> str:
         """
         Make url for the request.
+        :param symbol: cryptocurrency symbol.
         :return: url
         """
-        return f"{self._MEXC_BASE_URL}/api/v1/contract/kline/{self.validate_symbol()}"
+        return f"{self._MEXC_BASE_URL}/api/v1/contract/kline/{self.validate_symbol(symbol)}"
 
     def _make_destination_dir(self, symbol: str = "BTC_USDT", interval: str = "1m"):
         """
@@ -135,13 +136,14 @@ class MexcBulkDownloader:
         retry_delay = 30  # Seconds to wait before retrying (30 seconds)
 
         params = {
+            "symbol": self.validate_symbol(symbol),
             "start": int(start_date.timestamp()),
             "end": int(end_date.timestamp()),
             "interval": self._make_interval(interval),
         }
         for attempt in range(max_retries):
             try:
-                response = requests.get(self._make_url(), params=params)
+                response = requests.get(self._make_url(symbol), params=params)
                 print(
                     f"[green]Success: {self._make_destination_dir(symbol, interval)}/{int(start_date.timestamp())}.csv[/green]"
                 )
@@ -168,7 +170,7 @@ class MexcBulkDownloader:
 
     def download(
         self,
-        symbol: str = "BTC_USDT",
+        symbol: str,
         start_date: datetime = None,
         end_date: datetime = None,
         interval: str = "1m",
